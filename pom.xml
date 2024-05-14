@@ -29,7 +29,7 @@ under the License.
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<flink.version>1.18.0</flink.version>
+		<flink.version>1.18.1</flink.version>
 		<target.java.version>1.8</target.java.version>
 		<scala.binary.version>2.12</scala.binary.version>
 		<maven.compiler.source>${target.java.version}</maven.compiler.source>
@@ -73,7 +73,28 @@ under the License.
 			<artifactId>flink-connector-mongodb</artifactId>
 			<version>1.1.0-1.18</version>
 		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.apache.flink/flink-connector-base -->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-connector-base</artifactId>
+			<version>1.18.0</version>
+		</dependency>
 
+		<!-- https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync -->
+		<dependency>
+			<groupId>org.mongodb</groupId>
+			<artifactId>mongodb-driver-sync</artifactId>
+			<version>4.11.1</version>
+			<exclusions>
+				<exclusion>
+					<!-- This dependency is not required and will cause problems when shaded. -->
+					<groupId>org.mongodb</groupId>
+					<artifactId>bson-record-codec</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync -->
 		<!-- Example:
 
 		<dependency>

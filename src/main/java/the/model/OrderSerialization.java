@@ -7,18 +7,6 @@ import org.bson.BsonDocument;
 import java.time.Instant;
 
 public class OrderSerialization implements MongoDeserializationSchema<Order> {
-    private static OrderSerialization singleton;
-
-    private OrderSerialization() {}
-
-    public static OrderSerialization getInstance() {
-        if (singleton == null) {
-            singleton = new OrderSerialization();
-        }
-
-        return singleton;
-    }
-
     @Override
     public Order deserialize(BsonDocument document) {
         Order order = new Order();

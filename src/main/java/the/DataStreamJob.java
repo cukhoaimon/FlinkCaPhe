@@ -18,42 +18,6 @@
 
 package the;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.model.InsertOneModel;
-import org.apache.flink.api.common.RuntimeExecutionMode;
-import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
-import org.apache.flink.api.common.typeinfo.TypeHint;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.configuration.MemorySize;
-import org.apache.flink.connector.mongodb.sink.MongoSink;
-import org.apache.flink.connector.mongodb.source.MongoSource;
-import org.apache.flink.connector.mongodb.source.MongoSourceBuilder;
-import org.apache.flink.connector.mongodb.source.enumerator.splitter.PartitionStrategy;
-import org.apache.flink.connector.mongodb.source.reader.deserializer.MongoDeserializationSchema;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.DataStreamSource;
-import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
-import org.apache.flink.streaming.api.windowing.time.Time;
-import org.bson.BsonDocument;
-import org.bson.BsonInt32;
-import org.bson.BsonValue;
-import org.bson.Document;
-import org.bson.conversions.Bson;
-import the.model.Order;
-import the.model.OrderItem;
-import the.model.OrderItemSerialization;
-import the.model.OrderSerialization;
-import org.apache.flink.connector.base.DeliveryGuarantee;
-import java.time.Duration;
-import java.time.Instant;
-
 /**
  * Skeleton for a Flink DataStream Job.
  *
@@ -67,52 +31,10 @@ import java.time.Instant;
  * method, change the respective entry in the POM.xml file (simply search for 'mainClass').
  */
 public class DataStreamJob {
-	static MongoSource<Order> source = MongoSource.<Order>builder()
-			.setUri("mongodb://root:example@mongo:27017/?authSource=admin")
-			.setDatabase("test")
-			.setCollection("orders")
-			.setFetchSize(2048)
-			.setLimit(10000)
-			.setNoCursorTimeout(true)
-			.setPartitionStrategy(PartitionStrategy.SAMPLE)
-			.setPartitionSize(MemorySize.ofMebiBytes(64))
-			.setSamplesPerPartition(10)
-			.setDeserializationSchema(new OrderSerialization())
-			.build();
-
-
-	static MongoSink<BsonDocument> sink = MongoSink.<BsonDocument>builder()
-			.setUri("mongodb://root:example@mongo:27017/?authSource=admin")
-			.setDatabase("analytics")
-			.setCollection("metrics")
-			.setBatchSize(1000)
-			.setBatchIntervalMs(1000)
-			.setMaxRetries(3)
-			.setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
-			.setSerializationSchema((input, context) -> new InsertOneModel<>(input))
-			.build();
-
-	static WatermarkStrategy<Order> strategy = WatermarkStrategy
-			.<Order>forBoundedOutOfOrderness(Duration.ofSeconds(10))
-			.withTimestampAssigner((event, timestamp) -> event.createdTime.toEpochMilli());
-
 	public static void main(String[] args) throws Exception {
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment
-				.getExecutionEnvironment()
-				.setRuntimeMode(RuntimeExecutionMode.BATCH);
-
-		env.fromSource(source, strategy, "MongoDB-Source")
-				.setParallelism(2)
-				.map((MapFunction<Order, Integer>) order -> order.totalMoney)
-				.setParallelism(2)
-				.windowAll(TumblingEventTimeWindows.of(Time.days(7)))
-				.reduce(Integer::sum)
-				.map((MapFunction<Integer, BsonDocument>) total -> new BsonDocument("total_amount", new BsonInt32(total)))
-				.sinkTo(sink)
-				.setParallelism(1);
-
 		// Execute program, beginning computation.
-		env.execute("Calculate total money job");
+		CalculateTotalJob.get().execute("Calculate total money job");
+		ReduceProduct.get().execute("Reduce product by key");
 	}
 }
 

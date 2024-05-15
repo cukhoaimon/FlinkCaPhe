@@ -23,6 +23,7 @@ import com.mongodb.client.model.InsertOneModel;
 import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -37,6 +38,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.bson.BsonDocument;
@@ -65,6 +67,20 @@ import java.time.Instant;
  * method, change the respective entry in the POM.xml file (simply search for 'mainClass').
  */
 public class DataStreamJob {
+	static MongoSource<Order> source = MongoSource.<Order>builder()
+			.setUri("mongodb://root:example@mongo:27017/?authSource=admin")
+			.setDatabase("test")
+			.setCollection("orders")
+			.setFetchSize(2048)
+			.setLimit(10000)
+			.setNoCursorTimeout(true)
+			.setPartitionStrategy(PartitionStrategy.SAMPLE)
+			.setPartitionSize(MemorySize.ofMebiBytes(64))
+			.setSamplesPerPartition(10)
+			.setDeserializationSchema(new OrderSerialization())
+			.build();
+
+
 	static MongoSink<BsonDocument> sink = MongoSink.<BsonDocument>builder()
 			.setUri("mongodb://root:example@mongo:27017/?authSource=admin")
 			.setDatabase("analytics")
@@ -76,55 +92,28 @@ public class DataStreamJob {
 			.setSerializationSchema((input, context) -> new InsertOneModel<>(input))
 			.build();
 
+	static WatermarkStrategy<Order> strategy = WatermarkStrategy
+			.<Order>forBoundedOutOfOrderness(Duration.ofSeconds(10))
+			.withTimestampAssigner((event, timestamp) -> event.createdTime.toEpochMilli());
+
 	public static void main(String[] args) throws Exception {
-		MongoSource<Order> ordersSource = MongoSource.<Order>builder()
-				.setUri("mongodb://root:example@mongo:27017/?authSource=admin")
-				.setDatabase("test")
-				.setCollection("orders")
-				.setFetchSize(2048)
-				.setLimit(10000)
-				.setNoCursorTimeout(true)
-				.setPartitionStrategy(PartitionStrategy.SAMPLE)
-				.setPartitionSize(MemorySize.ofMebiBytes(64))
-				.setSamplesPerPartition(10)
-				.setDeserializationSchema(new MongoDeserializationSchema<Order>() {
-					@Override
-					public Order deserialize(BsonDocument document) {
-						Order order = new Order();
-						order._id = document.getObjectId("_id");
-						order.userID = document.getObjectId("userID");
-						order.status = document.get("status").asString().getValue();
-						order.totalMoney = document.get("totalMoney").asInt32().getValue();
-						order.createdTime = Instant.ofEpochSecond(document.get("createdTime").asDateTime().getValue());
-
-						return order;
-					}
-
-					@Override
-					public TypeInformation<Order> getProducedType() {
-						return TypeInformation.of(Order.class);
-					}
-				})
-				.build();
-		// Sets up the execution environment, which is the main entry point
-		// to building Flink applications.
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment
 				.getExecutionEnvironment()
-				.setRuntimeMode(RuntimeExecutionMode.STREAMING);
+				.setRuntimeMode(RuntimeExecutionMode.BATCH);
 
-		env.fromSource(ordersSource,WatermarkStrategy.noWatermarks(),"MongoDB-Source")
-				.setParallelism(1)
-				.map((MapFunction<Order, Integer>) order -> {
-                    return order.totalMoney; // Replace with your calculation
-                })
-				.windowAll(TumblingProcessingTimeWindows.of(Time.minutes(1))) // Define a window to calculate total money
-				.sum(0)
-				.map((MapFunction<Integer, BsonDocument>) total -> new BsonDocument("total_income", new BsonInt32(total)))
+		env.fromSource(source, strategy, "MongoDB-Source")
+				.setParallelism(2)
+				.map((MapFunction<Order, Integer>) order -> order.totalMoney)
+				.setParallelism(2)
+				.windowAll(TumblingEventTimeWindows.of(Time.days(7)))
+				.reduce(Integer::sum)
+				.map((MapFunction<Integer, BsonDocument>) total -> new BsonDocument("total_amount", new BsonInt32(total)))
 				.sinkTo(sink)
 				.setParallelism(1);
-
 
 		// Execute program, beginning computation.
 		env.execute("Calculate total money job");
 	}
 }
+
+

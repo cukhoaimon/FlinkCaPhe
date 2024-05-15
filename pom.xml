@@ -93,7 +93,18 @@ under the License.
 				</exclusion>
 			</exclusions>
 		</dependency>
-
+		<dependency>
+			<groupId>org.mongodb</groupId>
+			<artifactId>mongodb-driver-core</artifactId>
+			<version>4.11.1</version>
+			<exclusions>
+				<exclusion>
+					<!-- This dependency is not required and will cause problems when shaded. -->
+					<groupId>org.mongodb</groupId>
+					<artifactId>bson-record-codec</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
 		<!-- https://mvnrepository.com/artifact/org.mongodb/mongodb-driver-sync -->
 		<!-- Example:
 
